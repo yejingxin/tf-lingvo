@@ -392,7 +392,7 @@ class _Cluster:
   @property
   def num_splits_per_replica(self):
     # Note that a split must be within a replica.
-    assert self.num_devices_per_replica % self.num_devices_per_split == 0
+    assert self.num_devices_per_replica % self.num_devices_per_split == 0, f"{self.num_devices_per_replica} % {self.num_devices_per_split} != 0"
     return int(self.num_devices_per_replica / self.num_devices_per_split)
 
   @property
