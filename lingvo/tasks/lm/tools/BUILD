@@ -42,3 +42,26 @@ lingvo_py_binary(
         # Implicit tensorflow grpc dependency.
     ],
 )
+
+py_library(
+    name = "matmul_check_lib",
+    srcs = ["matmul_check.py"],
+    srcs_version = "PY3",
+    deps = [
+        "//lingvo:compat",
+        "//lingvo:model_registry",
+        "//lingvo/core:gshard_decode",
+        # Implicit numpy dependency.
+    ],
+)
+lingvo_py_binary(
+    name = "matmul_check",
+    srcs = [":matmul_check_lib"],
+    python_version = "PY3",
+    srcs_version = "PY3",
+    deps = [
+        ":matmul_check_lib",
+        "//lingvo:model_imports",
+        # Implicit tensorflow grpc dependency.
+    ],
+)

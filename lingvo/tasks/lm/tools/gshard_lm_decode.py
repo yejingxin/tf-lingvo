@@ -34,6 +34,7 @@ be space-separated integer strings, e.g.,
 To include a tokenizer, override the following functions of GShardLMDecode:
 init_vocab(), encode_string_to_ids(), and decode_ids_to_string().
 """
+import collections
 import concurrent.futures
 import functools
 import sys
@@ -42,6 +43,7 @@ import time
 from lingvo import compat as tf
 from lingvo import model_registry
 from lingvo.core import gshard_decode
+from lingvo.core import py_utils
 import numpy as np
 
 FLAGS = tf.flags.FLAGS
@@ -71,6 +73,8 @@ tf.flags.DEFINE_boolean(
 tf.flags.DEFINE_boolean('disable_logging', False,
                         'disable all tf.logging calls below level '
                         'CRITICAL')
+tf.flags.DEFINE_bool('disable_tf2', False,
+                     'Whether run on Tensorflow without V2 behaviors.')
 
 _daemon = gshard_decode.daemon
 
@@ -311,8 +315,8 @@ class GShardLMDecodeBatch(GShardLMDecode):
       for j in range(len(topk_decoded[i])):
         if FLAGS.output_score and topk_scores is not None:
           if len(topk_scores.shape) == 2:
-            output.write('%s\t%s\t%0.2f\n' %
-                         (target, topk_decoded[i][j], topk_scores[i, j]))
+            output.write('%.5e\t%s\t%s\n' %
+                         (topk_scores[i, j], target, topk_decoded[i][j]))
           else:
             output.write('%s\t%s\t%s\n' %
                          (target, topk_decoded[i][j], topk_scores[i, j]))
@@ -321,7 +325,7 @@ class GShardLMDecodeBatch(GShardLMDecode):
     else:
       if FLAGS.output_score and topk_scores is not None:
         if len(topk_scores.shape) == 2:
-          output.write('%s\t%s\t%0.2f\n' %
+          output.write('%s\t%s\t%0.5e\n' %
                        (target, topk_decoded[i][0], topk_scores[i, 0]))
         else:
           output.write('%s\t%s\t%s\n' %
@@ -412,6 +416,8 @@ class GShardLMDecodeBatch(GShardLMDecode):
         continue
 
       fileno, lineno = key[:, 0], key[:, 1]
+      scores = []
+      targets_cnt = collections.Counter()
       for i, target in enumerate(targets):
         if fileno[i] == -1 or lineno[i] == -1:
           continue
@@ -424,7 +430,7 @@ class GShardLMDecodeBatch(GShardLMDecode):
               print('topk_decoded[%d][%d]: %s' % (i, j, topk_target))
           elif len(topk_scores.shape) == 2:
             for j, topk_target in enumerate(topk_decoded[i]):
-              print('topk_decoded[%d][%d]: (%0.2f) %s' %
+              print('topk_decoded[%d][%d]: (%0.5e) %s' %
                     (i, j, topk_scores[i, j], topk_target))
           else:
             for j, topk_target in enumerate(topk_decoded[i]):
@@ -436,6 +442,13 @@ class GShardLMDecodeBatch(GShardLMDecode):
         if output:
           self.write_ith_sample_to_output(output, target, topk_decoded,
                                           topk_scores, i)
+          scores.append(topk_scores[i, 0])
+          for j, topk_target in enumerate(topk_decoded[i]):
+            targets_cnt['topk_decoded[i][%d]: %s'%(j, topk_target)] += 1
+      scores = np.array(scores)
+      output.write('score: mean=%.5e std=%.5e\n' % (np.mean(scores), np.std(scores)))
+      for k, v in targets_cnt.items():
+        output.write('cnt=%02d %s\n'%(v, k))
 
     tf.logging.info('Waiting for infeed thread')
     infeed_loop_thread.join()
@@ -471,4 +484,9 @@ def main(unused_argv):
 
 
 if __name__ == '__main__':
+  py_utils.SetEagerMode(False)
+  FLAGS(sys.argv, known_only=True)
+  if FLAGS.disable_tf2:
+    tf.disable_v2_behavior()
+  FLAGS.unparse_flags()
   tf.app.run(main)
