@@ -23,15 +23,6 @@ bazel run -c opt lingvo/tasks/lm/tools:matmul_check -- \
 --tpu=yejingxin-tpu-v3 \
 --disable_tf2=true
 
-
-This binary does not include a tokenizer, so each line in the input file should
-be space-separated integer strings, e.g.,
-8 3 5 4 2
-5 8 2 493 23 432
-6 22 3 42 2
-
-To include a tokenizer, override the following functions of GShardLMDecode:
-init_vocab(), encode_string_to_ids(), and decode_ids_to_string().
 """
 import concurrent.futures
 import functools
@@ -146,9 +137,11 @@ def main(unused_argv):
 
 
 if __name__ == '__main__':
+  tf.profiler.experimental.start('/tmp/profile_dir')
   py_utils.SetEagerMode(False)
   FLAGS(sys.argv, known_only=True)
   if FLAGS.disable_tf2:
     tf.disable_v2_behavior()
   FLAGS.unparse_flags()
   tf.app.run(main)
+  tf.profiler.experimental.stop()
