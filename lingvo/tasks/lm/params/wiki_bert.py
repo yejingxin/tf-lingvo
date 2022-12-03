@@ -275,6 +275,18 @@ class MLPerfBertDense175B(MLPerfBertDense1T):
   POSITIONAL_EMBEDDING = True
   TRAIN_STEPS_PER_LOOP = 20
 
+@model_registry.RegisterSingleTaskModel
+class MLPerfBertDense240B(MLPerfBertDense1T):
+  """Large Bert model with 240B parameters on 1024 chips."""
+  BATCH_SIZE = 1024
+  HIDDEN_DIM = 12288 * 4
+  ATTENTION_KEY_VALUE_DIM = 128
+  MODEL_DIM = 12288
+  NUM_HEADS = 96
+  NUM_TRANSFORMER_LAYERS = 128
+
+  POSITIONAL_EMBEDDING = True
+  TRAIN_STEPS_PER_LOOP = 20
 
 @model_registry.RegisterSingleTaskModel
 class MLPerfBertDense500B(MLPerfBertDense1T):
