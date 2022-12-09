@@ -13,32 +13,104 @@
 #
 # bazel test -c opt --test_output=streamed //lingvo:trainer_test //lingvo:models_test
 
-ARG cpu_base_image="tensorflow/build:2.9-python3.9"
+ARG cpu_base_image="ubuntu:18.04"
 ARG base_image=$cpu_base_image
 FROM $base_image
 
 LABEL maintainer="Lingvo team <lingvo-bot@google.com>"
 
-# Re-declare args because the args declared before FROM can't be used in any
-# instruction after a FROM.
-ARG cpu_base_image="tensorflow/build:2.9-python3.9"
+ARG cpu_base_image="ubuntu:18.04"
 ARG base_image=$cpu_base_image
 
-COPY docker /docker
+# Pick up some TF dependencies
+RUN apt update && DEBIAN_FRONTEND=noninteractive apt install -y --no-install-recommends software-properties-common
+RUN apt update && DEBIAN_FRONTEND=noninteractive apt install -y --no-install-recommends \
+        aria2 \
+        build-essential \
+        curl \
+        dirmngr \
+        emacs \
+        git \
+        gpg-agent \
+        less \
+        libfreetype6-dev \
+        libhdf5-serial-dev \
+        libpng-dev \
+        libzmq3-dev \
+        lsof \
+        pkg-config \
+        rename \
+        rsync \
+        sox \
+        unzip \
+        vim \
+        && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install python 3.9
+RUN apt-key adv --keyserver keyserver.ubuntu.com --recv-keys BA6932366A755776
+RUN echo "deb http://ppa.launchpad.net/deadsnakes/ppa/ubuntu bionic main" > /etc/apt/sources.list.d/deadsnakes-ppa-bionic.list
+RUN apt update && DEBIAN_FRONTEND=noninteractive apt install -y python3.9 python3.9-distutils python3.9-dev
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.9 1000
+# bazel assumes the python executable is "python".
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.9 1000
+
+RUN curl -O https://bootstrap.pypa.io/get-pip.py && python3 get-pip.py && rm get-pip.py
+
+ARG bazel_version=5.0.0
+# This is to install bazel, for development purposes.
+ENV BAZEL_VERSION ${bazel_version}
+RUN mkdir /bazel && \
+    cd /bazel && \
+    curl -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/57.0.2987.133 Safari/537.36" -fSsL -O https://github.com/bazelbuild/bazel/releases/download/$BAZEL_VERSION/bazel-$BAZEL_VERSION-installer-linux-x86_64.sh && \
+    curl -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/57.0.2987.133 Safari/537.36" -fSsL -o /bazel/LICENSE.txt https://raw.githubusercontent.com/bazelbuild/bazel/master/LICENSE && \
+    chmod +x bazel-*.sh && \
+    ./bazel-$BAZEL_VERSION-installer-linux-x86_64.sh && \
+    cd / && \
+    rm -f /bazel/bazel-$BAZEL_VERSION-installer-linux-x86_64.sh
+
+ARG pip_dependencies=' \
+      apache-beam[gcp]>=2.8 \
+      attrs \
+      contextlib2 \
+      dataclasses \
+      google-api-python-client \
+      graph-compression-google-research \
+      h5py \
+      ipykernel \
+      jupyter \
+      jupyter_http_over_ws \
+      matplotlib \
+      mock \
+      model-pruning-google-research \
+      numpy \
+      oauth2client \
+      pandas \
+      Pillow \
+      pyyaml \
+      recommonmark \
+      scikit-learn \
+      scipy \
+      sentencepiece \
+      sphinx \
+      sphinx_rtd_theme \
+      sympy'
+
+RUN python3 -m pip --no-cache-dir install $pip_dependencies
+RUN python3 -m ipykernel.kernelspec
 
 # The latest tensorflow requires CUDA 10 compatible nvidia drivers (410.xx).
 # If you are unable to update your drivers, an alternative is to compile
 # tensorflow from source instead of installing from pip.
-# Note: removed waymo-open-dataset due to a new incompatibility.
-RUN --mount=type=cache,target=/root/.cache \
-  python3 -m pip install -U pip
-RUN --mount=type=cache,target=/root/.cache \
-  python3 -m pip install -U -r /docker/dev.requirements.txt
-RUN python3 -m ipykernel.kernelspec
+# Ensure we install the correct version by uninstalling first.
+RUN python3 -m pip uninstall -y tensorflow tensorflow-gpu tf-nightly tf-nightly-gpu
+RUN python3 -m pip --no-cache-dir install tensorflow==2.9.2 tensorflow-datasets \
+  tensorflow-hub tensorflow-text==2.9.0 tensorflow-probability
+RUN python3 -m pip --no-cache-dir install --no-deps waymo-open-dataset-tf-2-6-0
+
 RUN jupyter serverextension enable --py jupyter_http_over_ws
 
-COPY docker/devel.bashrc /root/devel.bashrc
-RUN echo 'source /root/devel.bashrc' >> /root/.bashrc
 
 # Expose TensorBoard and Jupyter ports
 EXPOSE 6006

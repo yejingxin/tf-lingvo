@@ -189,6 +189,75 @@ class DenseLm8B2x2Decode(DenseLm8B2x2):
     p.builder.relative_attention_use_universal_1d_position = False
     return p
 
+# bazel run -c opt //lingvo:trainer --experimental_repo_remote_exec -- --mode=sync \
+# --alsologtostderr --model=lm.synthetic_packed_input.DenseLm8B4x4 \
+# --logdir=gs://yejingxin-us-central2/lingvo/v4-32-synth-DenseLm8B4x4-2022120502 \
+#  --tpu=yejingxin-tpu-v3 --worker_split_size=16 \
+# --ps_replicas=4 --job=executor_tpu --disable_tf2=true
+
+@model_registry.RegisterSingleTaskModel
+class DenseLm8B4x4(DenseLmTemplate):
+  """8B params LM model with 2D split."""
+  SEQUENCE_LENGTH = 1024
+  NUM_DEVICES_PER_SPLIT = 128
+  BATCH_DIM_PER_DEVICE = 0.125
+  NUM_TRANSFORMER_LAYERS = 4  
+  DEVICE_MESH_SHAPE = [4, 4]
+  DEVICE_MESH = np.arange(16).reshape(DEVICE_MESH_SHAPE)
+
+  def Task(self):
+    p = super().Task()
+    p.train.tpu_device_order_mode = 2  # DeviceOrderMode.MESH
+    p.builder.model_dim_reshape_segments = self.DEVICE_MESH_SHAPE[1]
+    p.builder.emb_w_split = [-1, 1]
+    p.builder.emb_out_split = [0, -1, 1]
+    p.builder.blm_split = [0, -1, 1]
+    p.builder.logits_split = [0, -1, 1]
+    return p
+
+@model_registry.RegisterSingleTaskModel
+class DenseLM1p7B32x1V4(DenseLmTemplate):
+  """8B params LM model with 2D split."""
+  MODEL_DIM = 2048
+  HIDDEN_DIM = 2048 * 4
+  NUM_HEADS = 8
+  ATTENTION_KEY_VALUE_DIM = 256
+  NUM_TRANSFORMER_LAYERS = 24
+  SEQUENCE_LENGTH = 2048
+  NUM_DEVICES_PER_SPLIT = 128
+  BATCH_DIM_PER_DEVICE = 0.5
+  DEVICE_MESH_SHAPE = [16, 1]
+  DEVICE_MESH = np.reshape(np.arange(0, np.product(DEVICE_MESH_SHAPE)), DEVICE_MESH_SHAPE)
+
+  def Task(self):
+    p = super().Task()
+    p.train.tpu_device_order_mode = 2  # DeviceOrderMode.MESH
+    p.builder.model_dim_reshape_segments = self.DEVICE_MESH_SHAPE[1]
+    p.builder.emb_w_split = [-1, 1]
+    p.builder.emb_out_split = [0, -1, 1]
+    p.builder.blm_split = [0, -1, 1]
+    p.builder.logits_split = [0, -1, 1]
+    return p
+
+@model_registry.RegisterSingleTaskModel
+class DenseLm8B16x1(DenseLmTemplate):
+  """8B params LM model with 2D split."""
+  SEQUENCE_LENGTH = 1024
+  NUM_DEVICES_PER_SPLIT = 128
+  BATCH_DIM_PER_DEVICE = 0.125
+  NUM_TRANSFORMER_LAYERS = 4  # 64 blocks of [DecSelfAttention, DenseReluDense]
+  DEVICE_MESH_SHAPE = [1, 16]
+  DEVICE_MESH = np.arange(16).reshape(DEVICE_MESH_SHAPE)
+
+  def Task(self):
+    p = super().Task()
+    p.train.tpu_device_order_mode = 2  # DeviceOrderMode.MESH
+    p.builder.model_dim_reshape_segments = self.DEVICE_MESH_SHAPE[1]
+    p.builder.emb_w_split = [-1, 1]
+    p.builder.emb_out_split = [0, -1, 1]
+    p.builder.blm_split = [0, -1, 1]
+    p.builder.logits_split = [0, -1, 1]
+    return p
 
 # Total params: 137,702,416,384.
 # Expect ~ 3.7k tokens/sec

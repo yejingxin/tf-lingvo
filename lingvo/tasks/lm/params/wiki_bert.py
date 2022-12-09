@@ -1,3 +1,4 @@
+# Lint as: python3
 # Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -147,12 +148,12 @@ class MLPerfTrainTemplate(BertTemplate):
     p.batch_size = self.BATCH_SIZE
     p.enable_packing = True
     p.shuffle = True
-    p.input_file = 'gs://mlperf_v1_1/bert/train'
+    p.input_file = 'gs://yejingxin-us-central2/bert/train/part@1024'
     return p
 
   def Test(self):
     p = input_generator.TFRecordBertInput.Params()
-    p.input_file = 'gs://mlperf_v1_1/bert/eval'
+    p.input_file = 'gs://yejingxin-us-central2/bert/eval/data'
     p.name = 'test'
     p.batch_size = 512
     return p
@@ -221,12 +222,38 @@ class MLPerfTrainBertDense2B(MLPerfTrainTemplate):
       0, np.product(DEVICE_MESH_SHAPE)).reshape(DEVICE_MESH_SHAPE)
   MODEL_DIM_RESHAPE_SEGMENTS = [4]
 
+# bazel run -c opt //lingvo:trainer --experimental_repo_remote_exec \
+# -- --mode=sync  --alsologtostderr \
+# --model=lm.wiki_bert.MLPerfTrainBertDense2B4x4 \
+# --logdir=gs://yejingxin-us-central2/lingvo/v4-32-bert-2B-2022120501 \
+#  --tpu=yejingxin-tpu-v4 --worker_split_size=16 \
+# --ps_replicas=4 --job=executor_tpu --disable_tf2=true
+
+@model_registry.RegisterSingleTaskModel
+class MLPerfTrainBertDense2B4x4(MLPerfTrainTemplate):
+  """Large Bert model with 2B parameters."""
+  VOCAB_SIZE = 30522
+  BATCH_SIZE = 1024  # ON 4x4
+
+  USE_REPEAT_LAYER = True
+  NUM_TRANSFORMER_LAYERS = 8
+  MODEL_DIM = 4096
+  NUM_HEADS = 16
+  HIDDEN_DIM = 16384
+  ATTENTION_KEY_VALUE_DIM = 256
+
+  DEVICE_MESH_SHAPE = [4, 4]
+  DEVICE_MESH = np.arange(
+      0, np.product(DEVICE_MESH_SHAPE)).reshape(DEVICE_MESH_SHAPE)
+  MODEL_DIM_RESHAPE_SEGMENTS = [4]
+
 
 # bazel run -c opt //lingvo:trainer -- --mode=sync \
 # --alsologtostderr \
 # --model=lm.wiki_bert.MLPerfBertDense1T \
 # --logdir=${LOGDIR} --tpu=${TPU_NAME} --worker_split_size=1024 \
 # --ps_replicas=256 --job=executor_tpu --disable_tf2=true
+
 @model_registry.RegisterSingleTaskModel
 class MLPerfBertDense1T(MLPerfTrainTemplate):
   """Large Bert model with 1T parameters on 1024 chips."""
@@ -273,6 +300,18 @@ class MLPerfBertDense175B(MLPerfBertDense1T):
   POSITIONAL_EMBEDDING = True
   TRAIN_STEPS_PER_LOOP = 20
 
+@model_registry.RegisterSingleTaskModel
+class MLPerfBertDense240B(MLPerfBertDense1T):
+  """Large Bert model with 240B parameters on 1024 chips."""
+  BATCH_SIZE = 1024
+  HIDDEN_DIM = 12288 * 4
+  ATTENTION_KEY_VALUE_DIM = 128
+  MODEL_DIM = 12288
+  NUM_HEADS = 96
+  NUM_TRANSFORMER_LAYERS = 128
+
+  POSITIONAL_EMBEDDING = True
+  TRAIN_STEPS_PER_LOOP = 20
 
 @model_registry.RegisterSingleTaskModel
 class MLPerfBertDense500B(MLPerfBertDense1T):
